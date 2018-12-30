@@ -8,4 +8,6 @@ Note : To run this code, you need to download the pre-trained word2vec embedding
 	Link to download this word2vec model = https://code.google.com/archive/p/word2vec/
 
 to train the model - 
-python3 - w2v_lang_model_2_1.py
+python - w2v_lang_model_2_1.py
+
+for predictions - python w2v_predict_lang_model.py
