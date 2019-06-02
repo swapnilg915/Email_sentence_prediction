@@ -1,19 +1,15 @@
 # -*- coding: utf-8 -*-
-
+import pickle, traceback, csv, re, os, json
+import numpy as np
 from numpy import array
 from keras.preprocessing.text import Tokenizer
 from keras.utils import to_categorical
 from keras.preprocessing.sequence import pad_sequences
 from keras.models import Sequential
-from keras.layers import Dense
-from keras.layers import LSTM
-from keras.layers import Embedding
-from keras.layers import Dropout
-import pickle, traceback, csv, re, os, json
+from keras.layers import Dense, LSTM, Embedding, Dropout
 from gensim.models import word2vec
 from gensim.models.keyedvectors import KeyedVectors
-import numpy as np
-
+from pymagnitude import *
 # generate a sequence from a language model
 def generate_seq(model, tokenizer, max_length, seed_text, n_words):
 	in_text = seed_text
@@ -36,6 +32,9 @@ def loadw2vLocal():
     model = KeyedVectors.load_word2vec_format('/home/swapnilg/word2vec/GoogleNews-vectors-negative300.bin.gz', limit=500000, binary=True)
     return model
 
+def loadw2v_magnitude():
+    print("\n loading w2v magnitude ... ")
+    return Magnitude("../../Downloads/GoogleNews-vectors-negative300.magnitude", pad_to_length = 500000)
 
 #step 6 === create embedding matrix
 def createEmbeddingLayer(word_index, w2vmodel, vocab_size):
@@ -47,7 +46,8 @@ def createEmbeddingLayer(word_index, w2vmodel, vocab_size):
         else:
             embedding_vector = np.zeros((1, 300)) # vector of 1 x 300
             try:
-                embedding_vector = w2vmodel[word]
+                # embedding_vector = w2vmodel[word]
+                embedding_vector = w2vmodel.query(word)
             except:
                 pass
             if embedding_vector is not None:
@@ -59,28 +59,20 @@ def createEmbeddingLayer(word_index, w2vmodel, vocab_size):
 
 
 def clean_str(string): # unused
-    string = re.sub(r"[^A-Za-z0-9\.\@\']", " ", string)
+    string = re.sub(r"[^A-Za-z0-9\.\@\?']", " ", string)
     string = re.sub(r"\s{2,}", " ", string)
     return string.strip()
 
         
 def getData():
-    csvfile = open("data.csv", "r")
+    csvfile = open("text_classification_dataset.csv", "r")
     dictobj = csv.DictReader(csvfile)
     final_data = ''
     for each in dictobj:
-        final_data += each['BodyText'] + '\n'
+        final_data += each['reviews'] + '\n'
     return final_data
 
-def getCleanData():
-	final_data = ''
-	jsonFile = json.load(open('data_cleaned.json'))
-	for dic in jsonFile:
-		final_data += dic['extracted_sent'] + '\n'
-	return final_data
-	
 data = getData()
-# data = getCleanData()
 print("\n loaded data === ", len(data))
 
 data = clean_str(data)
@@ -88,6 +80,7 @@ data = clean_str(data)
 tokenizer = Tokenizer()
 tokenizer.fit_on_texts([data])
 word_index = tokenizer.word_index
+print("\n word_index --- ", word_index)
 encoded = tokenizer.texts_to_sequences([data])[0]
 # retrieve vocabulary size
 vocab_size = len(tokenizer.word_index) + 1
@@ -97,18 +90,19 @@ sequences = list()
 for i in range(2, len(encoded)):
 	sequence = encoded[i-2:i+1]
 	sequences.append(sequence)
-print('Total Sequences: %d' % len(sequences))
+print('\n Total Sequences:', len(sequences))
 # pad sequences
 max_length = max([len(seq) for seq in sequences])
-sequences = pad_sequences(sequences, maxlen=max_length, padding='pre')
-print('Max Sequence Length: %d' % max_length)
+print('Max Sequence Length:',max_length)
+sequences = pad_sequences(sequences, maxlen=max_length, padding='pre', truncating='pre', value=0)
 # split into input and output elements
 sequences = array(sequences)
 X, y = sequences[:,:-1],sequences[:,-1]
 y = to_categorical(y, num_classes=vocab_size)
 
 ## emb_layer
-w2vmodel = loadw2vLocal()
+# w2vmodel = loadw2vLocal()
+w2vmodel = loadw2v_magnitude()
 embed_layer = createEmbeddingLayer(word_index, w2vmodel, vocab_size)
 
 # define model
@@ -119,7 +113,7 @@ model.add(Dropout(0.3))
 model.add(Dense(vocab_size, activation='softmax'))
 print(model.summary())
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-model.fit(X, y, epochs=10, verbose=2)
+model.fit(X, y, epochs=100, batch_size=128, verbose=2)
 
 #####################################################
 #save model
